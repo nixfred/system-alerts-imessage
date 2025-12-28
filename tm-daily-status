@@ -1,6 +1,8 @@
 #!/bin/bash
 # Time Machine Daily Status - sends noon summary if backups are healthy
 
+export PATH="/usr/local/bin:$PATH"
+
 # Get latest backup info
 last_backup=$(tmutil latestbackup 2>/dev/null)
 

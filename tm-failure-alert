@@ -2,6 +2,7 @@
 # Time Machine Failure Alert - sends iMessage when backup fails
 # Checks for: stale backups, failed backup attempts, disk not available
 
+export PATH="/usr/local/bin:$PATH"
 HOURS_THRESHOLD=${1:-24}  # Alert if no backup in N hours (default 24)
 STATE_FILE="/tmp/.tm_alert_state"
 
