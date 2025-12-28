@@ -1,0 +1,61 @@
+#!/bin/bash
+# Time Machine Failure Alert - sends iMessage when backup fails
+# Checks for: stale backups, failed backup attempts, disk not available
+
+HOURS_THRESHOLD=${1:-24}  # Alert if no backup in N hours (default 24)
+STATE_FILE="/tmp/.tm_alert_state"
+
+# Get timestamp of last successful backup
+last_backup=$(tmutil latestbackup 2>/dev/null)
+
+if [ -z "$last_backup" ]; then
+    # No backup destination or no backups exist
+    if ! grep -q "no_destination" "$STATE_FILE" 2>/dev/null; then
+        send "❌ Time Machine: No backup destination available!"
+        echo "no_destination" > "$STATE_FILE"
+    fi
+    exit 1
+fi
+
+# Extract timestamp from backup path (format: 2025-12-28-003624)
+backup_date=$(echo "$last_backup" | grep -oE '[0-9]{4}-[0-9]{2}-[0-9]{2}-[0-9]{6}' | tail -1)
+if [ -n "$backup_date" ]; then
+    # Convert to epoch
+    formatted_date=$(echo "$backup_date" | sed 's/\([0-9]\{4\}\)-\([0-9]\{2\}\)-\([0-9]\{2\}\)-\([0-9]\{2\}\)\([0-9]\{2\}\)\([0-9]\{2\}\)/\1-\2-\3 \4:\5:\6/')
+    backup_epoch=$(date -j -f "%Y-%m-%d %H:%M:%S" "$formatted_date" "+%s" 2>/dev/null)
+    now_epoch=$(date "+%s")
+
+    if [ -n "$backup_epoch" ]; then
+        hours_ago=$(( (now_epoch - backup_epoch) / 3600 ))
+
+        if [ "$hours_ago" -ge "$HOURS_THRESHOLD" ]; then
+            # Only alert once per stale period
+            if ! grep -q "stale_$hours_ago" "$STATE_FILE" 2>/dev/null; then
+                send "⚠️ Time Machine: No backup in ${hours_ago} hours! Last: $(echo $backup_date | cut -c1-10)"
+                echo "stale_$hours_ago" > "$STATE_FILE"
+            fi
+            exit 1
+        fi
+    fi
+fi
+
+# Check for ACTUAL backup failures in log (not just warnings)
+# These patterns indicate real failures, not routine structure warnings
+real_failures=$(log show --predicate 'subsystem == "com.apple.TimeMachine"' --style compact --last 6h 2>/dev/null | grep -ciE "backup failed|failed to start|backup was not performed|cannot complete backup|destination not available" | tr -d '\n' || echo "0")
+real_failures=${real_failures:-0}
+
+if [ "$real_failures" -gt 0 ]; then
+    last_error=$(log show --predicate 'subsystem == "com.apple.TimeMachine"' --style compact --last 6h 2>/dev/null | grep -iE "backup failed|failed to start|backup was not performed|cannot complete|destination not available" | tail -1 | cut -c35-100)
+
+    # Only alert once per error
+    error_hash=$(echo "$last_error" | md5 | cut -c1-8)
+    if ! grep -q "$error_hash" "$STATE_FILE" 2>/dev/null; then
+        send "❌ Time Machine backup FAILED: ${last_error}"
+        echo "$error_hash" > "$STATE_FILE"
+    fi
+    exit 1
+fi
+
+# All good - clear state
+rm -f "$STATE_FILE" 2>/dev/null
+exit 0
