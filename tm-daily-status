@@ -1,21 +1,34 @@
 #!/bin/bash
 # Time Machine Daily Status - sends noon summary if backups are healthy
 
-export PATH="/usr/local/bin:$PATH"
+export PATH="/usr/local/bin:/usr/bin:/bin:$PATH"
+NOTIFY="/usr/local/bin/notify"
 
 # Get latest backup info
 last_backup=$(tmutil latestbackup 2>/dev/null)
 
 if [ -z "$last_backup" ]; then
-    send "Time Machine daily check: No backup destination found"
+    $NOTIFY "No backup destination found" "Time Machine"
     exit 1
 fi
 
 # Extract timestamp and calculate age
 backup_date=$(echo "$last_backup" | grep -oE '[0-9]{4}-[0-9]{2}-[0-9]{2}-[0-9]{6}' | tail -1)
+
+if [ -z "$backup_date" ]; then
+    $NOTIFY "Could not parse backup date" "Time Machine"
+    exit 1
+fi
+
 formatted_date=$(echo "$backup_date" | sed 's/\([0-9]\{4\}\)-\([0-9]\{2\}\)-\([0-9]\{2\}\)-\([0-9]\{2\}\)\([0-9]\{2\}\)\([0-9]\{2\}\)/\1-\2-\3 \4:\5:\6/')
 backup_epoch=$(date -j -f "%Y-%m-%d %H:%M:%S" "$formatted_date" "+%s" 2>/dev/null)
 now_epoch=$(date "+%s")
+
+if [ -z "$backup_epoch" ]; then
+    $NOTIFY "Could not calculate backup age" "Time Machine"
+    exit 1
+fi
+
 hours_ago=$(( (now_epoch - backup_epoch) / 3600 ))
 
 # Get backup count for last 24h
@@ -23,13 +36,13 @@ backup_count=$(tmutil listbackups 2>/dev/null | grep "$(date +%Y-%m-%d)" | wc -l
 yesterday_count=$(tmutil listbackups 2>/dev/null | grep "$(date -v-1d +%Y-%m-%d)" | wc -l | tr -d ' ')
 total_recent=$((backup_count + yesterday_count))
 
-# Get destination disk free space
-disk_info=$(df -h "/Volumes/Time Machine 1" 2>/dev/null | tail -1)
-free_space=$(echo "$disk_info" | awk '{print $4}')
+# Get destination disk free space (with fallback)
+free_space=$(df -h "/Volumes/Time Machine 1" 2>/dev/null | awk 'NR==2 {print $4}')
+free_space=${free_space:-"unknown"}
 
 # Build status message
 if [ "$hours_ago" -lt 24 ]; then
-    send "Time Machine OK - Last backup ${hours_ago}h ago, ${total_recent} backups in 24h, ${free_space} free"
+    $NOTIFY "OK - Last backup ${hours_ago}h ago, ${total_recent} backups in 24h, ${free_space} free" "Time Machine"
 else
-    send "Time Machine WARNING - Last backup was ${hours_ago} hours ago!"
+    $NOTIFY "WARNING - Last backup was ${hours_ago} hours ago!" "Time Machine"
 fi

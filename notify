@@ -1,0 +1,20 @@
+#!/bin/bash
+# Send notification via ntfy.sh
+# Usage: notify "message" [title]
+
+MESSAGE="$1"
+TITLE="${2:-System Alert}"
+TOPIC="nixfred-a7x9k2m4"
+
+if [ -z "$MESSAGE" ]; then
+    echo "Usage: notify \"message\" [title]"
+    exit 1
+fi
+
+curl -s \
+    -H "Title: $TITLE" \
+    -H "Priority: default" \
+    -d "$MESSAGE" \
+    "https://ntfy.sh/$TOPIC" >/dev/null 2>&1
+
+exit $?
