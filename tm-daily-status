@@ -2,13 +2,12 @@
 # Time Machine Daily Status - sends noon summary if backups are healthy
 
 export PATH="/usr/local/bin:/usr/bin:/bin:$PATH"
-NOTIFY="/usr/local/bin/notify"
 
 # Get latest backup info
 last_backup=$(tmutil latestbackup 2>/dev/null)
 
 if [ -z "$last_backup" ]; then
-    $NOTIFY "No backup destination found" "Time Machine"
+    send "Time Machine: No backup destination found"
     exit 1
 fi
 
@@ -16,7 +15,7 @@ fi
 backup_date=$(echo "$last_backup" | grep -oE '[0-9]{4}-[0-9]{2}-[0-9]{2}-[0-9]{6}' | tail -1)
 
 if [ -z "$backup_date" ]; then
-    $NOTIFY "Could not parse backup date" "Time Machine"
+    send "Time Machine: Could not parse backup date"
     exit 1
 fi
 
@@ -25,7 +24,7 @@ backup_epoch=$(date -j -f "%Y-%m-%d %H:%M:%S" "$formatted_date" "+%s" 2>/dev/nul
 now_epoch=$(date "+%s")
 
 if [ -z "$backup_epoch" ]; then
-    $NOTIFY "Could not calculate backup age" "Time Machine"
+    send "Time Machine: Could not calculate backup age"
     exit 1
 fi
 
@@ -42,7 +41,7 @@ free_space=${free_space:-"unknown"}
 
 # Build status message
 if [ "$hours_ago" -lt 24 ]; then
-    $NOTIFY "OK - Last backup ${hours_ago}h ago, ${total_recent} backups in 24h, ${free_space} free" "Time Machine"
+    send "Time Machine OK: Last backup ${hours_ago}h ago, ${total_recent} backups in 24h, ${free_space} free"
 else
-    $NOTIFY "WARNING - Last backup was ${hours_ago} hours ago!" "Time Machine"
+    send "Time Machine WARNING: Last backup was ${hours_ago} hours ago!"
 fi

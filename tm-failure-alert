@@ -3,7 +3,6 @@
 # Checks for: stale backups, failed backup attempts, disk not available
 
 export PATH="/usr/local/bin:/usr/bin:/bin:$PATH"
-NOTIFY="/usr/local/bin/notify"
 HOURS_THRESHOLD=${1:-24}  # Alert if no backup in N hours (default 24)
 STATE_FILE="/tmp/.tm_alert_state"
 
@@ -13,7 +12,7 @@ last_backup=$(tmutil latestbackup 2>/dev/null)
 if [ -z "$last_backup" ]; then
     # No backup destination or no backups exist
     if ! grep -q "no_destination" "$STATE_FILE" 2>/dev/null; then
-        $NOTIFY "No backup destination available!" "Time Machine ALERT"
+        send "Time Machine: No backup destination available!"
         echo "no_destination" > "$STATE_FILE"
     fi
     exit 1
@@ -33,7 +32,7 @@ if [ -n "$backup_date" ]; then
         if [ "$hours_ago" -ge "$HOURS_THRESHOLD" ]; then
             # Only alert once per stale period
             if ! grep -q "stale_$hours_ago" "$STATE_FILE" 2>/dev/null; then
-                $NOTIFY "No backup in ${hours_ago} hours! Last: $(echo $backup_date | cut -c1-10)" "Time Machine ALERT"
+                send "Time Machine: No backup in ${hours_ago} hours! Last: $(echo $backup_date | cut -c1-10)"
                 echo "stale_$hours_ago" > "$STATE_FILE"
             fi
             exit 1
@@ -52,7 +51,7 @@ if [ "$real_failures" -gt 0 ]; then
     # Only alert once per error
     error_hash=$(echo "$last_error" | md5 | cut -c1-8)
     if ! grep -q "$error_hash" "$STATE_FILE" 2>/dev/null; then
-        $NOTIFY "Backup FAILED: ${last_error}" "Time Machine ALERT"
+        send "Time Machine FAILED: ${last_error}"
         echo "$error_hash" > "$STATE_FILE"
     fi
     exit 1
